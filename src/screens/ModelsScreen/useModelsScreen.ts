@@ -187,8 +187,24 @@ export function useModelsScreen() {
             await RNFS.copyFile(file.fileCopyUri || file.uri, destPath);
           }
 
+          // --- REGISTER THE MODEL WITH THE APP STATE ---
+          const totalSize = await getDirectorySize(mnnFolderPath);
+          const mnnModel = {
+            id: mnnFolderName,
+            name: 'MNN Imported Engine',
+            filename: mnnFolderName,
+            description: 'Local Alibaba MNN Model',
+            path: mnnFolderPath,
+            size: totalSize,
+            downloadedAt: new Date().toISOString(),
+            backend: 'mnn'
+          };
+
+          addDownloadedModel(mnnModel as any);
+          // ---------------------------------------------
+
           setImportProgress({ fraction: 1.0, fileName: 'Import Complete' });
-          setAlertState(showAlert('Success', 'MNN Model imported! Please scan for models.'));
+          setAlertState(showAlert('Success', 'MNN Model imported and registered!'));
         } catch (err) {
           console.error(err);
           setAlertState(showAlert('Error', 'Failed to import MNN files.'));
