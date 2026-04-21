@@ -138,17 +138,27 @@ export function useModelsScreen() {
       }));
 
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+// Add MNN detection: allows files ending in .mnn or .json
+const isMnn = resolvedFiles.some(f => f.name.toLowerCase().endsWith('.mnn') || f.name.toLowerCase().endsWith('.json'));
 
-      if (!allGguf && !singleZip) {
-        setAlertState(showAlert(
-          'Invalid File',
-          resolvedFiles.length > 1
-            ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
-            : 'Supported formats: .gguf (text models) and .zip (image models).',
-        ));
-        return;
-      }
+if (!allGguf && !singleZip && !isMnn) {
+  Alert.alert(
+    'Invalid File',
+    'Supported formats: .gguf, .zip, and MNN files.'
+  );
+  return;
+}
+
+// Bypass the 2-file limit if we are importing an MNN model
+if (!isMnn && resolvedFiles.length > 2) {
+  setAlertState({
+    show: true,
+    title: 'Too Many Files',
+    message: 'Select 1 file (.gguf/.zip) or 2 (.gguf + mmproj).'
+  });
+  return;
+}
 
       if (resolvedFiles.length > 2) {
         setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
