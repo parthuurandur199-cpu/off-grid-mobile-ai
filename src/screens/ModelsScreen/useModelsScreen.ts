@@ -169,6 +169,35 @@ if (!isMnn && resolvedFiles.length > 2) {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
+      // Intercept MNN files and bundle them into a single directory
+if (isMnn) {
+  try {
+    setImportProgress(10);
+    
+    // Create a dedicated folder for this MNN model in the app's models directory
+    const modelsDir = RNFS.DocumentDirectoryPath + '/models';
+    const mnnFolderName = 'MNN_Model_' + Date.now();
+    const mnnFolderPath = modelsDir + '/' + mnnFolderName;
+    await RNFS.mkdir(mnnFolderPath);
+
+    // Copy all the MNN files you selected into that new folder
+    for (let i = 0; i < resolvedFiles.length; i++) {
+      const file = resolvedFiles[i];
+      const destPath = mnnFolderPath + '/' + file.name;
+      await RNFS.copyFile(file.fileCopyUri || file.uri, destPath);
+      setImportProgress(10 + Math.floor((i / resolvedFiles.length) * 80));
+    }
+
+    setAlertState({ show: true, message: 'MNN Model imported! Please scan for models.', type: 'success' });
+  } catch (err) {
+    console.error(err);
+    Alert.alert('Error', 'Failed to import MNN files.');
+  } finally {
+    setImportProgress(0);
+  }
+  return; // Stop here so it doesn't trigger the .gguf/.zip logic below
+}
+
       if (singleZip) {
         await handleImportImageModelZip(firstUri, firstFileName);
         return;
