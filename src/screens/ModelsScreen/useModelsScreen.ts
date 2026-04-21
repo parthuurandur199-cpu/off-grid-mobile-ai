@@ -138,29 +138,22 @@ export function useModelsScreen() {
       }));
 
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
-// Add MNN detection: allows files ending in .mnn or .json
-const isMnn = resolvedFiles.some(f => f.name.toLowerCase().endsWith('.mnn') || f.name.toLowerCase().endsWith('.json'));
+      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+      // Add MNN detection: allows files ending in .mnn or .json
+      const isMnn = resolvedFiles.some(f => f.name.toLowerCase().endsWith('.mnn') || f.name.toLowerCase().endsWith('.json'));
 
-if (!allGguf && !singleZip && !isMnn) {
-  Alert.alert(
-    'Invalid File',
-    'Supported formats: .gguf, .zip, and MNN files.'
-  );
-  return;
-}
+      if (!allGguf && !singleZip && !isMnn) {
+        setAlertState(showAlert('Invalid File', 'Supported formats: .gguf, .zip, and MNN files.'));
+        return;
+      }
 
-// Bypass the 2-file limit if we are importing an MNN model
-if (!isMnn && resolvedFiles.length > 2) {
-  setAlertState({
-    show: true,
-    title: 'Too Many Files',
-    message: 'Select 1 file (.gguf/.zip) or 2 (.gguf + mmproj).'
-  });
-  return;
-}
+      // Bypass the 2-file limit if we are importing an MNN model
+      if (!isMnn && resolvedFiles.length > 2) {
+        setAlertState(showAlert('Too Many Files', 'Select 1 file (.gguf/.zip) or 2 (.gguf + mmproj).'));
+        return;
+      }
 
-      if (resolvedFiles.length > 2) {
+      if (resolvedFiles.length > 2 && !isMnn) {
         setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
         return;
       }
@@ -169,34 +162,41 @@ if (!isMnn && resolvedFiles.length > 2) {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
-      // Intercept MNN files and bundle them into a single directory
-if (isMnn) {
-  try {
-    setImportProgress(10);
-    
-    // Create a dedicated folder for this MNN model in the app's models directory
-    const modelsDir = RNFS.DocumentDirectoryPath + '/models';
-    const mnnFolderName = 'MNN_Model_' + Date.now();
-    const mnnFolderPath = modelsDir + '/' + mnnFolderName;
-    await RNFS.mkdir(mnnFolderPath);
+      // Intercept MNN files and bundle them into a single directory safely
+      if (isMnn) {
+        try {
+          setImportProgress({ fraction: 0.1, fileName: 'Preparing MNN Folder...' });
+          
+          // Create a dedicated folder for this MNN model in the app's models directory
+          const modelsDir = RNFS.DocumentDirectoryPath + '/models';
+          const mnnFolderName = 'MNN_Model_' + Date.now();
+          const mnnFolderPath = modelsDir + '/' + mnnFolderName;
+          
+          if (!(await RNFS.exists(modelsDir))) {
+            await RNFS.mkdir(modelsDir);
+          }
+          await RNFS.mkdir(mnnFolderPath);
 
-    // Copy all the MNN files you selected into that new folder
-    for (let i = 0; i < resolvedFiles.length; i++) {
-      const file = resolvedFiles[i];
-      const destPath = mnnFolderPath + '/' + file.name;
-      await RNFS.copyFile(file.fileCopyUri || file.uri, destPath);
-      setImportProgress(10 + Math.floor((i / resolvedFiles.length) * 80));
-    }
+          // Copy all the MNN files you selected into that new folder
+          for (let i = 0; i < resolvedFiles.length; i++) {
+            const file = resolvedFiles[i];
+            const currentProgress = 0.1 + ((i / resolvedFiles.length) * 0.8);
+            setImportProgress({ fraction: currentProgress, fileName: file.name });
+            
+            const destPath = mnnFolderPath + '/' + file.name;
+            await RNFS.copyFile(file.fileCopyUri || file.uri, destPath);
+          }
 
-    setAlertState({ show: true, message: 'MNN Model imported! Please scan for models.', type: 'success' });
-  } catch (err) {
-    console.error(err);
-    Alert.alert('Error', 'Failed to import MNN files.');
-  } finally {
-    setImportProgress(0);
-  }
-  return; // Stop here so it doesn't trigger the .gguf/.zip logic below
-}
+          setImportProgress({ fraction: 1.0, fileName: 'Import Complete' });
+          setAlertState(showAlert('Success', 'MNN Model imported! Please scan for models.'));
+        } catch (err) {
+          console.error(err);
+          setAlertState(showAlert('Error', 'Failed to import MNN files.'));
+        } finally {
+          setImportProgress(null);
+        }
+        return; // Stop here so it doesn't trigger the .gguf/.zip logic below
+      }
 
       if (singleZip) {
         await handleImportImageModelZip(firstUri, firstFileName);
