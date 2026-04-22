@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
@@ -71,7 +71,6 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
   setAlertState(showAlert('Success', `${modelName} imported successfully!`));
 }
 
-
 export function useModelsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
@@ -98,7 +97,6 @@ export function useModelsScreen() {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
       image.loadHFModels();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const setActiveTab = (tab: ModelTab) => {
@@ -131,7 +129,6 @@ export function useModelsScreen() {
 
       if (!result || result.length === 0) return;
 
-      // Resolve filename: use picker name if available, fall back to last path segment of URI
       const resolvedFiles = result.map(f => ({
         ...f,
         name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
@@ -139,7 +136,6 @@ export function useModelsScreen() {
 
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
       const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
-      // Add MNN detection: allows files ending in .mnn or .json
       const isMnn = resolvedFiles.some(f => f.name.toLowerCase().endsWith('.mnn') || f.name.toLowerCase().endsWith('.json'));
 
       if (!allGguf && !singleZip && !isMnn) {
@@ -147,14 +143,8 @@ export function useModelsScreen() {
         return;
       }
 
-      // Bypass the 2-file limit if we are importing an MNN model
       if (!isMnn && resolvedFiles.length > 2) {
         setAlertState(showAlert('Too Many Files', 'Select 1 file (.gguf/.zip) or 2 (.gguf + mmproj).'));
-        return;
-      }
-
-      if (resolvedFiles.length > 2 && !isMnn) {
-        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
         return;
       }
 
@@ -162,12 +152,11 @@ export function useModelsScreen() {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
-      // Intercept MNN files and bundle them into a single directory safely
+      // Intercept MNN files and bundle them
       if (isMnn) {
         try {
           setImportProgress({ fraction: 0.1, fileName: 'Preparing MNN Folder...' });
           
-          // Create a dedicated folder for this MNN model in the app's models directory
           const modelsDir = RNFS.DocumentDirectoryPath + '/models';
           const mnnFolderName = 'MNN_Model_' + Date.now();
           const mnnFolderPath = modelsDir + '/' + mnnFolderName;
@@ -177,7 +166,6 @@ export function useModelsScreen() {
           }
           await RNFS.mkdir(mnnFolderPath);
 
-          // Copy all the MNN files you selected into that new folder
           for (let i = 0; i < resolvedFiles.length; i++) {
             const file = resolvedFiles[i];
             const currentProgress = 0.1 + ((i / resolvedFiles.length) * 0.8);
@@ -187,21 +175,26 @@ export function useModelsScreen() {
             await RNFS.copyFile(file.fileCopyUri || file.uri, destPath);
           }
 
-          // --- REGISTER THE MODEL WITH THE APP STATE ---
+          // --- SHOTGUN FIX: SUPPLY EVERY POSSIBLE PROPERTY ---
           const totalSize = await getDirectorySize(mnnFolderPath);
           const mnnModel = {
-            id: mnnFolderName,
+            id: 'local_' + mnnFolderName,
             name: 'MNN Imported Engine',
             filename: mnnFolderName,
             description: 'Local Alibaba MNN Model',
-            path: mnnFolderPath,
+            type: 'local',                 // Tells UI it's a local file
+            path: mnnFolderPath,           // Standard path
+            filePath: mnnFolderPath,       // Llama.rn path property
+            modelPath: mnnFolderPath,      // Image model path property
+            url: `file://${mnnFolderPath}`,// URI startswith checks
+            isLocal: true,
             size: totalSize,
             downloadedAt: new Date().toISOString(),
             backend: 'mnn'
           };
 
           addDownloadedModel(mnnModel as any);
-          // ---------------------------------------------
+          // ---------------------------------------------------
 
           setImportProgress({ fraction: 1.0, fileName: 'Import Complete' });
           setAlertState(showAlert('Success', 'MNN Model imported and registered!'));
@@ -211,7 +204,7 @@ export function useModelsScreen() {
         } finally {
           setImportProgress(null);
         }
-        return; // Stop here so it doesn't trigger the .gguf/.zip logic below
+        return; 
       }
 
       if (singleZip) {
@@ -273,7 +266,6 @@ export function useModelsScreen() {
     totalModelCount,
     handleImportLocalModel,
     handleRefresh,
-    // text model state & handlers
     searchQuery: text.searchQuery,
     setSearchQuery: text.setSearchQuery,
     isLoading: text.isLoading,
@@ -313,7 +305,6 @@ export function useModelsScreen() {
     setSortOption: text.setSortOption,
     isModelDownloaded: text.isModelDownloaded,
     getDownloadedModel: text.getDownloadedModel,
-    // image model state & handlers
     availableHFModels: image.availableHFModels,
     hfModelsLoading: image.hfModelsLoading,
     hfModelsError: image.hfModelsError,
